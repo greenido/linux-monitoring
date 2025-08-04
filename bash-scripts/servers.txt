@@ -1,0 +1,25 @@
+#
+# Production Servers
+#
+# prod-server-1.example.com
+# prod-server-2.example.com
+# prod-db.example.com
+# app.mycompany.com
+# api.mycompany.com
+
+#
+# Staging Servers
+# 
+# staging-1.example.com
+# staging-2.example.com
+# staging-3.example.com
+# staging-4.example.com
+
+#
+# Development Servers
+#
+# dev.example.com
+
+# Add your servers here (one per line)
+# Lines starting with # are comments and will be ignored
+# Empty lines are also ignored 
