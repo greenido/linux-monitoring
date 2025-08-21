@@ -1,4 +1,16 @@
-#!/usr/bin/env node
+/**
+ * Standalone Test Runner for System Health Monitor
+ * ------------------------------------------------
+ * Allows running all core tests without Jest or external dependencies.
+ * - Used for quick validation and CI environments.
+ * - Mocks system calls and file operations for safe testing.
+ * - See TEST_README.md for more details.
+ *
+ * How to use:
+ *  - Run: `node run-tests.js`
+ *  - All main exported functions from system-health-monitor.js are tested
+ *  - Output shows pass/fail and error details
+ */
 
 const { execSync } = require('child_process');
 const fs = require('fs');
@@ -19,11 +31,9 @@ function test(name, testFunction) {
         console.log(`   Error: ${error.message}`);
         testsFailed++;
     }
-}
 
 function expect(value) {
     return {
-        toBe: (expected) => {
             if (value !== expected) {
                 throw new Error(`Expected ${value} to be ${expected}`);
             }
@@ -33,6 +43,7 @@ function expect(value) {
                 throw new Error(`Expected ${value} to be null`);
             }
         },
+        function test(name, testFunction) {
         toEqual: (expected) => {
             if (JSON.stringify(value) !== JSON.stringify(expected)) {
                 throw new Error(`Expected ${JSON.stringify(value)} to equal ${JSON.stringify(expected)}`);
@@ -44,12 +55,10 @@ function expect(value) {
             }
         },
         toContain: (expected) => {
-            if (!value.includes(expected)) {
                 throw new Error(`Expected ${value} to contain ${expected}`);
             }
         }
     };
-}
 
 // Mock execSync for testing
 const originalExecSync = require('child_process').execSync;
@@ -73,6 +82,7 @@ let mockFsExistsSync = false;
 let mockFsReadFileSync = '0';
 let mockFsWriteFileSyncCalled = false;
 
+        function expect(value) {
 function mockExistsSync(path) {
     return mockFsExistsSync;
 }
@@ -142,6 +152,7 @@ test('getCpuUsage should handle errors gracefully', () => {
 });
 
 // Test Memory Usage
+
 test('getMemUsage should return correct memory percentage', () => {
     setupMocks();
     mockExecSyncReturnValues = ['75.3'];

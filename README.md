@@ -1,10 +1,15 @@
 # Linux System Health Monitor 🎉
 
+Why?
+Well... I built it as we needed a simple/quick solution to monitor our servers.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D14.0.0-brightgreen)](https://nodejs.org/)
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](./TEST_README.md)
 
-A comprehensive Node.js-based monitoring suite for Linux servers that provides real-time system health monitoring with intelligent alerts. The suite includes two main monitoring services:
+What?
+This is NodeJS monitoring suite for Linux servers that provides real-time system health monitoring with intelligent alerts. 
+The suite includes two main monitoring services:
 
 - **🖥️ System Health Monitor**: Monitors CPU, memory, and swap usage with detailed process information
 - **💾 Disk Monitor**: Tracks disk usage across filesystems with threshold-based alerts

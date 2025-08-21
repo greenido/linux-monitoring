@@ -1,41 +1,62 @@
-#!/usr/bin/env node
+/**
+============================================================
+    Goal: Automated Tests for System Health Monitor
+============================================================
+    Why:
+        - Ensure reliability and correctness of health monitoring logic
+        - Catch regressions and edge cases before deployment
+        - Provide confidence for refactoring and extension
+
+    What:
+        - Mocks system commands, file operations, and Slack API
+        - Tests all exported functions from system-health-monitor.js
+        - Covers normal, error, and edge cases for CPU, memory, swap, disk, and alerting
+        - Uses Jest for mocking and assertions
+============================================================
+*/
+jest.mock('axios');
 
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-// Mock axios for testing
+// Mock axios for Slack alert testing
 const axios = require('axios');
 jest.mock('axios');
 
-// Import the functions we want to test
+// Import functions to test from main monitor
 const {
-    getCpuUsage,
-    getTopCpuProcesses,
-    getMemUsage,
-    getDetailedMemoryInfo,
-    getTopMemoryProcesses,
-    getSwapUsage,
-    getDetailedSwapInfo,
-    getSystemLoad,
-    getUptime,
-    getDiskUsage,
-    formatProcessList,
-    checkSystemHealth,
-    sendSlackAlert
+        getCpuUsage,
+        getTopCpuProcesses,
+        getMemUsage,
+        getDetailedMemoryInfo,
+        getTopMemoryProcesses,
+        getSwapUsage,
+        getDetailedSwapInfo,
+        getSystemLoad,
+        getUptime,
+        getDiskUsage,
+        formatProcessList,
+        checkSystemHealth,
+        sendSlackAlert
 } = require('./system-health-monitor');
 
+
+// =====================
+// Test Suite for Health Monitor
+// =====================
 describe('System Health Monitor Tests', () => {
     let mockExecSync;
     let mockFs;
-    
+
     beforeEach(() => {
-        // Reset all mocks
+        // Reset all mocks and global state before each test
         jest.clearAllMocks();
-        
-        // Mock execSync completely to avoid real system calls
+
+        // Mock execSync to avoid real system calls, return canned data
         mockExecSync = jest.spyOn(require('child_process'), 'execSync').mockImplementation((command, options) => {
-            // Return mock data based on the command being executed
+            // ...existing code...
+            // (see below for command-specific mock returns)
             if (command.includes("top -bn1 | grep 'Cpu(s)'")) {
                 return '85.5';
             } else if (command.includes("free | grep Mem")) {
@@ -43,16 +64,11 @@ describe('System Health Monitor Tests', () => {
             } else if (command.includes("free | grep Swap")) {
                 return '35.7';
             } else if (command.includes("free -h")) {
-                return `              total        used        free      shared  buff/cache   available
-Mem:           15Gi       8.2Gi       2.1Gi       0.0Ki       4.7Gi       6.8Gi
-Swap:         8.0Gi       1.2Gi       6.8Gi`;
+                return `              total        used        free      shared  buff/cache   available\nMem:           15Gi       8.2Gi       2.1Gi       0.0Ki       4.7Gi       6.8Gi\nSwap:         8.0Gi       1.2Gi       6.8Gi`;
             } else if (command.includes("ps aux --sort=-%cpu")) {
-                return `user1 1234 25.5 10.2 1234567 89012 pts/0 S+ 10:30 0:05 /usr/bin/node app.js
-user2 5678 15.2 5.1 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py
-user3 9012 8.7 3.2 456789 12345 pts/2 S+ 10:32 0:01 /usr/bin/bash`;
+                return `user1 1234 25.5 10.2 1234567 89012 pts/0 S+ 10:30 0:05 /usr/bin/node app.js\nuser2 5678 15.2 5.1 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py\nuser3 9012 8.7 3.2 456789 12345 pts/2 S+ 10:32 0:01 /usr/bin/bash`;
             } else if (command.includes("ps aux --sort=-%mem")) {
-                return `user1 1234 5.2 25.5 1234567 89012 pts/0 S+ 10:30 0:05 /usr/bin/node app.js
-user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
+                return `user1 1234 5.2 25.5 1234567 89012 pts/0 S+ 10:30 0:05 /usr/bin/node app.js\nuser2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
             } else if (command.includes("uptime")) {
                 return ' 10:45:30 up 2 days, 3:45, 2 users, load average: 1.25, 1.15, 0.95';
             } else if (command.includes("uptime -p")) {
@@ -62,8 +78,8 @@ user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
             }
             return '';
         });
-        
-        // Mock fs
+
+        // Mock fs for alert file operations
         mockFs = {
             existsSync: jest.fn(),
             readFileSync: jest.fn(),
@@ -72,22 +88,27 @@ user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
         jest.spyOn(fs, 'existsSync').mockImplementation(mockFs.existsSync);
         jest.spyOn(fs, 'readFileSync').mockImplementation(mockFs.readFileSync);
         jest.spyOn(fs, 'writeFileSync').mockImplementation(mockFs.writeFileSync);
-        
-        // Mock axios
+
+        // Mock axios for Slack API
         axios.post.mockResolvedValue({ status: 200 });
-        
-        // Reset global variables
+
+        // Reset global CPU threshold timer
         global.cpuOverThresholdSince = null;
     });
 
     afterEach(() => {
+        // Restore all mocks after each test
         jest.restoreAllMocks();
     });
 
+
+    // =====================
+    // CPU Usage Tests
+    // =====================
     describe('CPU Usage Tests', () => {
         test('should get CPU usage correctly', () => {
             const result = getCpuUsage();
-            
+            // Should parse mocked value
             expect(result).toBe(85.5);
             expect(mockExecSync).toHaveBeenCalledWith(
                 "top -bn1 | grep 'Cpu(s)' | awk '{print $2 + $4}'",
@@ -96,19 +117,16 @@ user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
         });
 
         test('should handle CPU usage error gracefully', () => {
-            // Override the mock for this specific test
+            // Simulate command failure
             mockExecSync.mockImplementationOnce(() => {
                 throw new Error('Command failed');
             });
-            
             const result = getCpuUsage();
-            
             expect(result).toBeNull();
         });
 
         test('should get top CPU processes correctly', () => {
             const result = getTopCpuProcesses(3);
-            
             expect(result).toHaveLength(3);
             expect(result[0]).toEqual({
                 user: 'user1',
@@ -126,19 +144,20 @@ user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
         });
 
         test('should handle malformed ps output gracefully', () => {
-            // Override the mock for this specific test
+            // Simulate malformed output
             mockExecSync.mockImplementationOnce(() => 'invalid output format');
-            
             const result = getTopCpuProcesses(3);
-            
             expect(result).toEqual([]);
         });
     });
 
+
+    // =====================
+    // Memory Usage Tests
+    // =====================
     describe('Memory Usage Tests', () => {
         test('should get memory usage correctly', () => {
             const result = getMemUsage();
-            
             expect(result).toBe(75.3);
             expect(mockExecSync).toHaveBeenCalledWith(
                 "free | grep Mem | awk '{print $3/$2 * 100.0}'",
@@ -148,7 +167,6 @@ user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
 
         test('should get detailed memory info correctly', () => {
             const result = getDetailedMemoryInfo();
-            
             expect(result).toEqual({
                 total: '15Gi',
                 used: '8.2Gi',
@@ -161,32 +179,30 @@ user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
 
         test('should get top memory processes correctly', () => {
             const result = getTopMemoryProcesses(2);
-            
             expect(result).toHaveLength(2);
             expect(result[0].mem).toBe(25.5);
             expect(result[1].mem).toBe(15.2);
         });
     });
 
+
+    // =====================
+    // Swap Usage Tests
+    // =====================
     describe('Swap Usage Tests', () => {
         test('should get swap usage correctly', () => {
             const result = getSwapUsage();
-            
             expect(result).toBe(35.7);
         });
 
         test('should handle zero swap correctly', () => {
-            // Override the mock for this specific test
             mockExecSync.mockImplementationOnce(() => '0');
-            
             const result = getSwapUsage();
-            
             expect(result).toBe(0);
         });
 
         test('should get detailed swap info correctly', () => {
             const result = getDetailedSwapInfo();
-            
             expect(result).toEqual({
                 total: '8.0Gi',
                 used: '1.2Gi',
@@ -195,10 +211,13 @@ user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
         });
     });
 
+
+    // =====================
+    // System Information Tests
+    // =====================
     describe('System Information Tests', () => {
         test('should get system load correctly', () => {
             const result = getSystemLoad();
-            
             expect(result).toEqual({
                 '1min': 1.25,
                 '5min': 1.15,
@@ -208,13 +227,11 @@ user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
 
         test('should get uptime correctly', () => {
             const result = getUptime();
-            
             expect(result).toBe('up 2 days, 3 hours, 45 minutes');
         });
 
         test('should get disk usage correctly', () => {
             const result = getDiskUsage();
-            
             expect(result).toEqual({
                 filesystem: '/dev/sda1',
                 size: '100G',
@@ -226,6 +243,10 @@ user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
         });
     });
 
+
+    // =====================
+    // Process List Formatting Tests
+    // =====================
     describe('Process List Formatting Tests', () => {
         test('should format process list correctly', () => {
             const processes = [
@@ -246,9 +267,7 @@ user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
                     command: '/usr/bin/python script.py'
                 }
             ];
-            
             const result = formatProcessList(processes, 'cpu');
-            
             expect(result).toContain('1. */usr/bin/node app.js*');
             expect(result).toContain('PID: 1234 | User: user1 | CPU: 25.5%');
             expect(result).toContain('2. */usr/bin/python script.py*');
@@ -266,87 +285,72 @@ user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
                     command: '/usr/bin/very/long/path/to/a/very/long/command/name/that/exceeds/fifty/characters'
                 }
             ];
-            
             const result = formatProcessList(processes, 'cpu');
-            // The truncation logic is first 47 chars + '...'
             expect(result).toContain('1. */usr/bin/very/long/path/to/a/very/long/command/...*');
         });
 
         test('should handle empty process list', () => {
             const result = formatProcessList([], 'cpu');
-            
             expect(result).toBe('No processes found');
         });
 
         test('should handle null process list', () => {
             const result = formatProcessList(null, 'cpu');
-            
             expect(result).toBe('No processes found');
         });
     });
 
+
+    // =====================
+    // Alert Cooldown Tests
+    // =====================
     describe('Alert Cooldown Tests', () => {
         test('should respect alert cooldown period', () => {
             const now = Date.now();
             const lastAlertTime = now - (15 * 60 * 1000); // 15 minutes ago
-            
             mockFs.existsSync.mockReturnValue(true);
             mockFs.readFileSync.mockReturnValue(lastAlertTime.toString());
-            
-            // Mock high CPU usage
             mockExecSync.mockReturnValue('95.0');
-            
             const result = checkSystemHealth();
-            
-            // Should not send alert due to cooldown
             expect(axios.post).not.toHaveBeenCalled();
         });
 
         test('should send alert after cooldown period', () => {
             const now = Date.now();
             const lastAlertTime = now - (35 * 60 * 1000); // 35 minutes ago (cooldown is 30 min)
-            
             mockFs.existsSync.mockReturnValue(true);
             mockFs.readFileSync.mockReturnValue(lastAlertTime.toString());
-            
-            // Mock high CPU usage
             mockExecSync.mockReturnValue('95.0');
-            
             const result = checkSystemHealth();
-            
-            // Should send alert after cooldown
             expect(axios.post).toHaveBeenCalled();
         });
     });
 
+
+    // =====================
+    // CPU Threshold Duration Tests
+    // =====================
     describe('CPU Threshold Duration Tests', () => {
         test('should not alert immediately when CPU goes over threshold', () => {
-            // Mock high CPU usage
             mockExecSync.mockReturnValue('95.0');
-            
             const result = checkSystemHealth();
-            
-            // Should not send alert immediately
             expect(axios.post).not.toHaveBeenCalled();
         });
 
         test('should alert after CPU stays over threshold for required duration', () => {
             const now = Date.now();
             const overThresholdSince = now - (6 * 60 * 1000); // 6 minutes ago
-            
-            // Mock high CPU usage
             mockExecSync.mockReturnValue('95.0');
-            
-            // Mock that CPU has been over threshold for 6 minutes
             global.cpuOverThresholdSince = overThresholdSince;
-            
             const result = checkSystemHealth();
-            
-            // Should send alert after duration requirement
             expect(axios.post).toHaveBeenCalled();
         });
     });
 
+
+    // =====================
+    // Slack Alert Tests
+    // =====================
     describe('Slack Alert Tests', () => {
         test('should send Slack alert with correct format', async () => {
             const alerts = [
@@ -362,17 +366,14 @@ user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
                     ]
                 }
             ];
-            
-            // Mock system info
+            // Mock system info for Slack message
             mockExecSync
                 .mockReturnValueOnce('up 2 days, 3 hours') // uptime
                 .mockReturnValueOnce(' 10:45:30 up 2 days, 3:45, 2 users, load average: 1.25, 1.15, 0.95') // load
                 .mockReturnValueOnce('/dev/sda1       100G   75G   20G  79% /'); // disk
-            
             await sendSlackAlert(alerts);
-            
             expect(axios.post).toHaveBeenCalledWith(
-                expect.any(String), // webhook URL
+                expect.any(String),
                 expect.objectContaining({
                     text: expect.stringContaining('🚨 *System Health Alert on'),
                     attachments: expect.arrayContaining([
@@ -388,36 +389,32 @@ user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
 
         test('should handle Slack API errors gracefully', async () => {
             axios.post.mockRejectedValue(new Error('Slack API error'));
-            
             const alerts = [
                 {
                     title: 'Test Alert',
                     value: 'Test value'
                 }
             ];
-            
-            // Should not throw error
             await expect(sendSlackAlert(alerts)).resolves.not.toThrow();
         });
     });
 
+
+    // =====================
+    // Integration Tests
+    // =====================
     describe('Integration Tests', () => {
         test('should trigger CPU alert with full context', () => {
             const now = Date.now();
             const overThresholdSince = now - (6 * 60 * 1000);
-            
             // Mock all the data needed for a CPU alert
             mockExecSync
                 .mockReturnValueOnce('95.0') // CPU usage
-                .mockReturnValueOnce(`user1 1234 25.5 10.2 1234567 89012 pts/0 S+ 10:30 0:05 /usr/bin/node app.js
-user2 5678 15.2 5.1 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`) // top processes
+                .mockReturnValueOnce(`user1 1234 25.5 10.2 1234567 89012 pts/0 S+ 10:30 0:05 /usr/bin/node app.js\nuser2 5678 15.2 5.1 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`) // top processes
                 .mockReturnValueOnce('75.0') // memory usage (below threshold)
                 .mockReturnValueOnce('25.0'); // swap usage (below threshold)
-            
             global.cpuOverThresholdSince = overThresholdSince;
-            
             const result = checkSystemHealth();
-            
             expect(axios.post).toHaveBeenCalledWith(
                 expect.any(String),
                 expect.objectContaining({
@@ -436,15 +433,10 @@ user2 5678 15.2 5.1 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`)
             mockExecSync
                 .mockReturnValueOnce('75.0') // CPU usage (below threshold)
                 .mockReturnValueOnce('95.0') // memory usage
-                .mockReturnValueOnce(`              total        used        free      shared  buff/cache   available
-Mem:           15Gi       8.2Gi       2.1Gi       0.0Ki       4.7Gi       6.8Gi
-Swap:         8.0Gi       1.2Gi       6.8Gi`) // detailed memory
-                .mockReturnValueOnce(`user1 1234 5.2 25.5 1234567 89012 pts/0 S+ 10:30 0:05 /usr/bin/node app.js
-user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`) // top memory processes
+                .mockReturnValueOnce(`              total        used        free      shared  buff/cache   available\nMem:           15Gi       8.2Gi       2.1Gi       0.0Ki       4.7Gi       6.8Gi\nSwap:         8.0Gi       1.2Gi       6.8Gi`) // detailed memory
+                .mockReturnValueOnce(`user1 1234 5.2 25.5 1234567 89012 pts/0 S+ 10:30 0:05 /usr/bin/node app.js\nuser2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`) // top memory processes
                 .mockReturnValueOnce('25.0'); // swap usage (below threshold)
-            
             const result = checkSystemHealth();
-            
             expect(axios.post).toHaveBeenCalledWith(
                 expect.any(String),
                 expect.objectContaining({
@@ -464,12 +456,8 @@ user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`)
                 .mockReturnValueOnce('75.0') // CPU usage (below threshold)
                 .mockReturnValueOnce('75.0') // memory usage (below threshold)
                 .mockReturnValueOnce('75.0') // swap usage
-                .mockReturnValueOnce(`              total        used        free      shared  buff/cache   available
-Mem:           15Gi       8.2Gi       2.1Gi       0.0Ki       4.7Gi       6.8Gi
-Swap:         8.0Gi       6.0Gi       2.0Gi`); // detailed swap
-            
+                .mockReturnValueOnce(`              total        used        free      shared  buff/cache   available\nMem:           15Gi       8.2Gi       2.1Gi       0.0Ki       4.7Gi       6.8Gi\nSwap:         8.0Gi       6.0Gi       2.0Gi`); // detailed swap
             const result = checkSystemHealth();
-            
             expect(axios.post).toHaveBeenCalledWith(
                 expect.any(String),
                 expect.objectContaining({
@@ -484,12 +472,15 @@ Swap:         8.0Gi       6.0Gi       2.0Gi`); // detailed swap
         });
     });
 
+
+    // =====================
+    // Error Handling Tests
+    // =====================
     describe('Error Handling Tests', () => {
         test('should handle all command failures gracefully', () => {
             mockExecSync.mockImplementation(() => {
                 throw new Error('Command failed');
             });
-            
             // All functions should return null or empty arrays on error
             expect(getCpuUsage()).toBeNull();
             expect(getTopCpuProcesses()).toEqual([]);
@@ -505,8 +496,6 @@ Swap:         8.0Gi       6.0Gi       2.0Gi`); // detailed swap
 
         test('should handle malformed command output gracefully', () => {
             mockExecSync.mockReturnValue('malformed output');
-            
-            // Functions should handle malformed output gracefully
             expect(getTopCpuProcesses()).toEqual([]);
             expect(getTopMemoryProcesses()).toEqual([]);
             expect(getDetailedMemoryInfo()).toBeNull();
@@ -516,6 +505,7 @@ Swap:         8.0Gi       6.0Gi       2.0Gi`); // detailed swap
         });
     });
 });
+
 
 // Run tests if this file is executed directly
 if (require.main === module) {
@@ -535,4 +525,4 @@ if (require.main === module) {
         getDiskUsage,
         formatProcessList
     };
-} 
+}

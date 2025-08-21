@@ -1,4 +1,20 @@
-#!/usr/bin/env node
+/**
+============================================================
+    Goal: System Health Monitor for Linux Servers
+============================================================
+    Why:
+        - Proactively detect and alert on system resource issues (CPU, memory, swap, disk)
+        - Prevent downtime and performance degradation by notifying admins via Slack
+        - Provide actionable process details for troubleshooting
+
+    What:
+        - Periodically checks system health metrics
+        - Sends Slack alerts when thresholds are exceeded
+        - Includes top resource-consuming processes in alerts
+        - Implements cooldowns and duration checks to avoid alert spam
+        - Exports functions for testing and extension
+============================================================
+*/
 
 const { execSync } = require('child_process');
 const axios = require('axios');
@@ -23,8 +39,38 @@ const ALERT_COOLDOWN = 30 * 60 * 1000; // 30 minutes
 
 const LAST_ALERT_FILE = path.join(__dirname, '.last_health_alert');
 
+// Node.js modules for system commands, HTTP requests, file operations, and path handling
+const { execSync } = require('child_process');
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+
+// Load environment variables from .env file if present
+try {
+        require('dotenv').config();
+} catch (error) {
+        // dotenv not installed, fallback to direct env vars
+}
+
+// =====================
+// Configuration Section
+// =====================
+const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL; // Slack webhook for alerts
+const CPU_THRESHOLD = 90; // CPU usage % threshold
+const MEM_THRESHOLD = 90; // Memory usage % threshold
+const SWAP_THRESHOLD = 50; // Swap usage % threshold
+const CPU_OVER_THRESHOLD_DURATION = 5 * 60 * 1000; // CPU must be high for 5 min
+const CHECK_INTERVAL = 5 * 60 * 1000; // Check every 5 min
+const ALERT_COOLDOWN = 30 * 60 * 1000; // Wait 30 min between alerts
+
+// File to track last alert timestamp
+const LAST_ALERT_FILE = path.join(__dirname, '.last_health_alert');
+
+
+// Get current CPU usage as a percentage
 function getCpuUsage() {
     try {
+        // Uses 'top' and 'awk' to sum user and system CPU usage
         const output = execSync("top -bn1 | grep 'Cpu(s)' | awk '{print $2 + $4}'", { encoding: 'utf8' });
         return parseFloat(output.trim());
     } catch (error) {
@@ -33,8 +79,11 @@ function getCpuUsage() {
     }
 }
 
+
+// Get top N processes by CPU usage
 function getTopCpuProcesses(limit = 5) {
     try {
+        // Uses 'ps aux' sorted by CPU, returns process details
         const output = execSync(`ps aux --sort=-%cpu | head -${limit + 1} | tail -${limit}`, { encoding: 'utf8' });
         return output.trim().split('\n').map(line => {
             const parts = line.trim().split(/\s+/);
@@ -61,8 +110,11 @@ function getTopCpuProcesses(limit = 5) {
     }
 }
 
+
+// Get current memory usage as a percentage
 function getMemUsage() {
     try {
+        // Uses 'free' and 'awk' to calculate memory usage
         const output = execSync("free | grep Mem | awk '{print $3/$2 * 100.0}'", { encoding: 'utf8' });
         return parseFloat(output.trim());
     } catch (error) {
@@ -71,12 +123,14 @@ function getMemUsage() {
     }
 }
 
+
+// Get detailed memory info (human-readable)
 function getDetailedMemoryInfo() {
     try {
+        // Uses 'free -h' for breakdown
         const freeOutput = execSync("free -h", { encoding: 'utf8' });
         const memLine = freeOutput.split('\n')[1];
         const parts = memLine.trim().split(/\s+/);
-        
         return {
             total: parts[1],
             used: parts[2],
@@ -91,8 +145,11 @@ function getDetailedMemoryInfo() {
     }
 }
 
+
+// Get top N processes by memory usage
 function getTopMemoryProcesses(limit = 5) {
     try {
+        // Uses 'ps aux' sorted by memory, returns process details
         const output = execSync(`ps aux --sort=-%mem | head -${limit + 1} | tail -${limit}`, { encoding: 'utf8' });
         return output.trim().split('\n').map(line => {
             const parts = line.trim().split(/\s+/);
@@ -119,8 +176,11 @@ function getTopMemoryProcesses(limit = 5) {
     }
 }
 
+
+// Get current swap usage as a percentage
 function getSwapUsage() {
     try {
+        // Uses 'free' and 'awk' to calculate swap usage
         const output = execSync("free | grep Swap | awk '{if ($2==0) print 0; else print $3/$2 * 100.0}'", { encoding: 'utf8' });
         return parseFloat(output.trim());
     } catch (error) {
@@ -129,12 +189,14 @@ function getSwapUsage() {
     }
 }
 
+
+// Get detailed swap info (human-readable)
 function getDetailedSwapInfo() {
     try {
+        // Uses 'free -h' for breakdown
         const freeOutput = execSync("free -h", { encoding: 'utf8' });
         const swapLine = freeOutput.split('\n')[2];
         const parts = swapLine.trim().split(/\s+/);
-        
         return {
             total: parts[1],
             used: parts[2],
@@ -146,8 +208,11 @@ function getDetailedSwapInfo() {
     }
 }
 
+
+// Get system load averages (1, 5, 15 min)
 function getSystemLoad() {
     try {
+        // Uses 'uptime' and regex to extract load averages
         const output = execSync("uptime", { encoding: 'utf8' });
         const loadMatch = output.match(/load average: ([\d.]+), ([\d.]+), ([\d.]+)/);
         if (loadMatch) {
@@ -164,6 +229,8 @@ function getSystemLoad() {
     }
 }
 
+
+// Get system uptime (pretty format)
 function getUptime() {
     try {
         const output = execSync("uptime -p", { encoding: 'utf8' });
@@ -174,8 +241,11 @@ function getUptime() {
     }
 }
 
+
+// Get root disk usage info
 function getDiskUsage() {
     try {
+        // Uses 'df -h' for root filesystem
         const output = execSync("df -h / | tail -1", { encoding: 'utf8' });
         const parts = output.trim().split(/\s+/);
         return {
@@ -192,6 +262,8 @@ function getDiskUsage() {
     }
 }
 
+
+// Read last alert timestamp from file
 function getLastAlertTime() {
     try {
         if (fs.existsSync(LAST_ALERT_FILE)) {
@@ -204,6 +276,8 @@ function getLastAlertTime() {
     return 0;
 }
 
+
+// Write current timestamp to last alert file
 function setLastAlertTime() {
     try {
         fs.writeFileSync(LAST_ALERT_FILE, Date.now().toString());
@@ -212,26 +286,31 @@ function setLastAlertTime() {
     }
 }
 
+
+// Format process list for Slack message
 function formatProcessList(processes, type) {
     if (!processes || processes.length === 0) return 'No processes found';
-    
     return processes.map((proc, index) => {
         const shortCommand = proc.command.length > 50 ? proc.command.substring(0, 47) + '...' : proc.command;
         return `${index + 1}. *${shortCommand}*\n   PID: ${proc.pid} | User: ${proc.user} | ${type === 'cpu' ? `CPU: ${proc.cpu}%` : `Memory: ${proc.mem}%`} | RSS: ${proc.rss}`;
     }).join('\n');
 }
 
+
+// Send alert(s) to Slack channel via webhook
 async function sendSlackAlert(alerts) {
     const hostname = require('os').hostname();
     const uptime = getUptime();
     const load = getSystemLoad();
     const disk = getDiskUsage();
-    
+
+    // Compose main message text with system info
     let messageText = `🚨 *System Health Alert on ${hostname}*`;
     if (uptime) messageText += `\n⏰ Uptime: ${uptime}`;
     if (load) messageText += `\n📊 Load: ${load['1min']} (1m), ${load['5min']} (5m), ${load['15min']} (15m)`;
     if (disk) messageText += `\n💾 Root Disk: ${disk.used}/${disk.size} (${disk.usagePercent})`;
-    
+
+    // Format each alert as a Slack attachment
     const attachments = alerts.map(alert => ({
         color: 'danger',
         title: alert.title,
@@ -239,12 +318,12 @@ async function sendSlackAlert(alerts) {
         fields: alert.fields || [],
         ts: Math.floor(Date.now() / 1000)
     }));
-    
+
     const message = {
         text: messageText,
         attachments: attachments
     };
-    
+
     try {
         await axios.post(SLACK_WEBHOOK_URL, message);
         console.log('Slack alert sent:', alerts.map(a => a.title).join(', '));
@@ -254,9 +333,19 @@ async function sendSlackAlert(alerts) {
     }
 }
 
-// Track CPU over-threshold duration
+
+// Track when CPU first exceeded threshold
 let cpuOverThresholdSince = null;
 
+
+/*
+  Main health check logic:
+    - Checks CPU, memory, swap usage
+    - If thresholds exceeded, builds alert(s)
+    - For CPU, only alerts if high for >5 min
+    - Alerts include top processes and system breakdowns
+    - Alerts sent to Slack if cooldown expired
+*/
 function checkSystemHealth() {
     const alerts = [];
     const cpu = getCpuUsage();
@@ -272,7 +361,6 @@ function checkSystemHealth() {
         if (now - cpuOverThresholdSince >= CPU_OVER_THRESHOLD_DURATION) {
             const topProcesses = getTopCpuProcesses(8);
             const processDetails = formatProcessList(topProcesses, 'cpu');
-            
             alerts.push({
                 title: '🚀 High CPU Usage Detected',
                 value: `*Current CPU Usage: ${cpu.toFixed(1)}%*\n*Threshold: ${CPU_THRESHOLD}%*\n*Duration: ${((now - cpuOverThresholdSince) / 60000).toFixed(1)} minutes*\n\n*Top CPU Processes:*\n${processDetails}`,
@@ -290,20 +378,18 @@ function checkSystemHealth() {
     } else {
         cpuOverThresholdSince = null;
     }
-    
+
+    // Memory: Alert if over threshold
     if (mem !== null && mem >= MEM_THRESHOLD) {
         const detailedMem = getDetailedMemoryInfo();
         const topProcesses = getTopMemoryProcesses(8);
         const processDetails = formatProcessList(topProcesses, 'memory');
-        
+
         let memoryDetails = `*Current Memory Usage: ${mem.toFixed(1)}%*\n*Threshold: ${MEM_THRESHOLD}%*`;
-        
         if (detailedMem) {
             memoryDetails += `\n*Memory Breakdown:*\n• Total: ${detailedMem.total}\n• Used: ${detailedMem.used}\n• Available: ${detailedMem.available}\n• Cache: ${detailedMem.cache}`;
         }
-        
         memoryDetails += `\n\n*Top Memory Processes:*\n${processDetails}`;
-        
         alerts.push({
             title: '🧠 High Memory Usage Detected',
             value: memoryDetails,
@@ -321,15 +407,14 @@ function checkSystemHealth() {
             ]
         });
     }
-    
+
+    // Swap: Alert if over threshold
     if (swap !== null && swap >= SWAP_THRESHOLD) {
         const detailedSwap = getDetailedSwapInfo();
         let swapDetails = `*Current Swap Usage: ${swap.toFixed(1)}%*\n*Threshold: ${SWAP_THRESHOLD}%*`;
-        
         if (detailedSwap) {
             swapDetails += `\n*Swap Breakdown:*\n• Total: ${detailedSwap.total}\n• Used: ${detailedSwap.used}\n• Free: ${detailedSwap.free}`;
         }
-        
         alerts.push({
             title: '💾 High Swap Usage Detected',
             value: swapDetails,
@@ -348,6 +433,7 @@ function checkSystemHealth() {
         });
     }
 
+    // Send alerts if any, respecting cooldown
     if (alerts.length > 0) {
         const lastAlertTime = getLastAlertTime();
         if (now - lastAlertTime >= ALERT_COOLDOWN) {
@@ -360,11 +446,15 @@ function checkSystemHealth() {
     }
 }
 
+
+// Ensure Slack webhook is set before starting
 if (!SLACK_WEBHOOK_URL || SLACK_WEBHOOK_URL === 'YOUR_SLACK_WEBHOOK_URL_HERE') {
     console.error('Please set your Slack webhook URL in the SLACK_WEBHOOK_URL variable');
     process.exit(1);
 }
 
+
+// Startup logs for visibility
 console.log('☀️☀️☀️ System health monitor started');
 console.log(`Checking every ${CHECK_INTERVAL / 1000 / 60} minutes`);
 console.log(`CPU threshold: ${CPU_THRESHOLD}%`);
@@ -372,15 +462,18 @@ console.log(`Memory threshold: ${MEM_THRESHOLD}%`);
 console.log(`Swap threshold: ${SWAP_THRESHOLD}%`);
 console.log(`Alert cooldown: ${ALERT_COOLDOWN / 1000 / 60} minutes`);
 
+// Initial health check and schedule periodic checks
 checkSystemHealth();
 setInterval(checkSystemHealth, CHECK_INTERVAL);
 
+// Graceful shutdown on Ctrl+C
 process.on('SIGINT', () => {
     console.log('\nSystem health monitor stopped');
     process.exit(0);
 });
 
-// Export functions for testing
+
+// Export functions for testing and extension
 module.exports = {
     getCpuUsage,
     getTopCpuProcesses,
