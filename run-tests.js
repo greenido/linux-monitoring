@@ -14,6 +14,9 @@
 
 const cp = require('child_process');
 const fs = require('fs');
+const { getLogger } = require('./lib/logger');
+
+const logger = getLogger('run-tests');
 
 // Set up mocks BEFORE importing system-health-monitor so that destructuring uses the mocked functions
 const originalExecSync = cp.execSync;
@@ -116,7 +119,7 @@ const {
 } = require('./system-health-monitor');
 
 // Simple test runner for system health monitor
-console.log('🧪 Running System Health Monitor Tests...\n');
+logger.info('Running system health monitor standalone tests');
 
 let testsPassed = 0;
 let testsFailed = 0;
@@ -124,11 +127,10 @@ let testsFailed = 0;
 function test(name, testFunction) {
     try {
         testFunction();
-        console.log(`✅ ${name}`);
+        logger.info({ testName: name }, 'Test passed');
         testsPassed++;
     } catch (error) {
-        console.log(`❌ ${name}`);
-        console.log(`   Error: ${error.message}`);
+        logger.error({ testName: name, err: error }, 'Test failed');
         testsFailed++;
     }
 }
@@ -373,10 +375,11 @@ test('should handle command failures gracefully', () => {
 });
 
 // Print test results
-console.log('\n📊 Test Results:');
-console.log(`✅ Tests Passed: ${testsPassed}`);
-console.log(`❌ Tests Failed: ${testsFailed}`);
-console.log(`📈 Total Tests: ${testsPassed + testsFailed}`);
+logger.info({
+    testsPassed,
+    testsFailed,
+    totalTests: testsPassed + testsFailed,
+}, 'Standalone test summary');
 
 // Restore original modules
 cp.execSync = originalExecSync;
@@ -385,9 +388,9 @@ fs.readFileSync = originalReadFileSync;
 fs.writeFileSync = originalWriteFileSync;
 
 if (testsFailed === 0) {
-    console.log('\n🎉 All tests passed!');
+    logger.info('All standalone tests passed');
     process.exit(0);
 } else {
-    console.log('\n💥 Some tests failed!');
+    logger.error({ testsFailed }, 'Some standalone tests failed');
     process.exit(1);
 }

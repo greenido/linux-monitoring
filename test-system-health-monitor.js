@@ -19,6 +19,9 @@ jest.mock('axios');
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { getLogger } = require('./lib/logger');
+
+const logger = getLogger('test-system-health-monitor');
 
 // Mock axios for Slack alert testing
 const axios = require('axios');
@@ -523,7 +526,7 @@ describe('System Health Monitor Tests', () => {
 
 // Run tests if this file is executed directly
 if (require.main === module) {
-    console.log('Running System Health Monitor Tests...');
+    logger.info('Running system health monitor tests directly');
     // This would typically use a test runner like Jest
     // For now, we'll just export the test functions
     module.exports = {
