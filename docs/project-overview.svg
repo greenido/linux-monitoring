@@ -1,0 +1,78 @@
+<svg width="1200" height="680" viewBox="0 0 1200 680" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Public Linux Monitor Architecture</title>
+  <desc id="desc">A high-level architecture diagram showing Linux hosts, monitoring scripts, shared utilities, alerts, and deployment scripts.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d1b2a"/>
+      <stop offset="100%" stop-color="#1b263b"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1f3a5f"/>
+      <stop offset="100%" stop-color="#27496d"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#00b4d8"/>
+      <stop offset="100%" stop-color="#90e0ef"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#90e0ef"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="680" fill="url(#bg)"/>
+
+  <text x="600" y="66" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="36" font-weight="700" fill="#ffffff">
+    Public Linux Monitor
+  </text>
+  <text x="600" y="100" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="17" fill="#cde8ff">
+    Real-time Linux health monitoring with structured logs, Slack alerts, and bulk deployment
+  </text>
+
+  <rect x="70" y="175" width="260" height="280" rx="18" fill="url(#card)" filter="url(#shadow)"/>
+  <rect x="70" y="175" width="260" height="8" fill="url(#accent)"/>
+  <text x="200" y="220" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="24" font-weight="700" fill="#ffffff">Linux Hosts</text>
+  <text x="95" y="260" font-family="Verdana, Geneva, sans-serif" font-size="16" fill="#d9f0ff">- CPU and memory pressure</text>
+  <text x="95" y="292" font-family="Verdana, Geneva, sans-serif" font-size="16" fill="#d9f0ff">- Disk and I/O activity</text>
+  <text x="95" y="324" font-family="Verdana, Geneva, sans-serif" font-size="16" fill="#d9f0ff">- Network RX and TX rates</text>
+  <text x="95" y="356" font-family="Verdana, Geneva, sans-serif" font-size="16" fill="#d9f0ff">- Open file descriptor usage</text>
+  <text x="95" y="404" font-family="Verdana, Geneva, sans-serif" font-size="14" fill="#9ad8ff">Collected by local monitor services</text>
+
+  <rect x="410" y="140" width="390" height="350" rx="18" fill="url(#card)" filter="url(#shadow)"/>
+  <rect x="410" y="140" width="390" height="8" fill="url(#accent)"/>
+  <text x="605" y="185" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="25" font-weight="700" fill="#ffffff">Monitoring Suite</text>
+
+  <rect x="440" y="215" width="330" height="58" rx="10" fill="#335c81"/>
+  <text x="605" y="252" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="17" fill="#eef8ff">system-health-monitor.js</text>
+
+  <rect x="440" y="288" width="330" height="58" rx="10" fill="#335c81"/>
+  <text x="605" y="325" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="17" fill="#eef8ff">disk-monitor.js</text>
+
+  <rect x="440" y="361" width="330" height="95" rx="10" fill="#2f5577"/>
+  <text x="605" y="393" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="17" fill="#eef8ff">Shared Utilities (lib/common.js)</text>
+  <text x="460" y="422" font-family="Verdana, Geneva, sans-serif" font-size="14" fill="#d1eeff">Config loading, cooldowns, webhook checks, shutdown hooks</text>
+  <text x="460" y="443" font-family="Verdana, Geneva, sans-serif" font-size="14" fill="#d1eeff">Structured logs via lib/logger.js (Pino JSON or pretty)</text>
+
+  <rect x="880" y="175" width="260" height="140" rx="18" fill="url(#card)" filter="url(#shadow)"/>
+  <rect x="880" y="175" width="260" height="8" fill="url(#accent)"/>
+  <text x="1010" y="220" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="24" font-weight="700" fill="#ffffff">Alerts</text>
+  <text x="905" y="260" font-family="Verdana, Geneva, sans-serif" font-size="16" fill="#d9f0ff">- Slack webhook notifications</text>
+  <text x="905" y="292" font-family="Verdana, Geneva, sans-serif" font-size="16" fill="#d9f0ff">- Rich context and top processes</text>
+
+  <rect x="880" y="345" width="260" height="170" rx="18" fill="url(#card)" filter="url(#shadow)"/>
+  <rect x="880" y="345" width="260" height="8" fill="url(#accent)"/>
+  <text x="1010" y="390" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="24" font-weight="700" fill="#ffffff">Deployment</text>
+  <text x="905" y="430" font-family="Verdana, Geneva, sans-serif" font-size="16" fill="#d9f0ff">- install-disk-monitor.sh</text>
+  <text x="905" y="460" font-family="Verdana, Geneva, sans-serif" font-size="16" fill="#d9f0ff">- bulk-install.sh</text>
+  <text x="905" y="490" font-family="Verdana, Geneva, sans-serif" font-size="16" fill="#d9f0ff">- remote-install.sh</text>
+
+  <path d="M330 315 C360 315, 370 315, 410 315" stroke="#90e0ef" stroke-width="4" fill="none" marker-end="url(#arrow)"/>
+  <path d="M800 250 C835 250, 845 250, 880 245" stroke="#90e0ef" stroke-width="4" fill="none" marker-end="url(#arrow)"/>
+  <path d="M800 410 C835 410, 845 430, 880 430" stroke="#90e0ef" stroke-width="4" fill="none" marker-end="url(#arrow)"/>
+
+  <text x="600" y="624" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="15" fill="#b8def8">
+    Monitors run as systemd services, evaluate thresholds, and emit actionable alerts for operations teams
+  </text>
+</svg>

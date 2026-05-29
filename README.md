@@ -21,6 +21,7 @@ The suite includes two main monitoring services:
 
 - [📁 Project Structure](#-project-structure)
 - [✨ Features](#-features)
+- [🖼️ Architecture Overview](#-architecture-overview)
 - [🆕 Today's Updates](#-todays-updates)
 - [⚡ Quick Start](#-quick-start)
 - [📋 Prerequisites](#prerequisites)
@@ -96,6 +97,12 @@ public-linux-monitor/
 - 🛡️ **Robust SSH Handling**: Automated SSH troubleshooting and key management
 - 🧪 **Comprehensive Testing**: Full test suite with Jest and standalone runner
 - 📈 **Production Ready**: Designed for enterprise Linux environments
+
+## 🖼️ Architecture Overview
+
+![Public Linux Monitor architecture and data flow](docs/project-overview.svg)
+
+This diagram shows how Linux host telemetry flows through the two monitor services, shared utility layer, and into Slack alerts, with single-host and bulk deployment scripts on the right.
 
 ## 🆕 Today's Updates
 
