@@ -36,6 +36,9 @@ const {
         getSystemLoad,
         getUptime,
         getDiskUsage,
+        getOpenFileDescriptors,
+        getNetworkBandwidth,
+        getDiskIO,
         formatProcessList,
         checkSystemHealth,
         sendSlackAlert

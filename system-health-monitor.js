@@ -18,6 +18,7 @@
 
 const cp = require('child_process');
 const axios = require('axios');
+const fs = require('fs');
 
 const {
     loadConfig,
@@ -246,6 +247,164 @@ function getDiskUsage() {
 }
 
 
+// Get open file descriptors count and limit
+function getOpenFileDescriptors() {
+    try {
+        if (!fs.existsSync('/proc/sys/fs/file-nr')) {
+            return null;
+        }
+        const fileNrContent = fs.readFileSync('/proc/sys/fs/file-nr', 'utf8');
+        const parts = fileNrContent.trim().split(/\s+/);
+        if (parts.length >= 3) {
+            const allocated = parseInt(parts[0], 10);
+            const maximum = parseInt(parts[2], 10);
+            const usagePercent = maximum > 0 ? (allocated / maximum * 100) : 0;
+            return {
+                allocated,
+                maximum,
+                usagePercent: parseFloat(usagePercent.toFixed(2))
+            };
+        }
+        return null;
+    } catch (error) {
+        console.error('Error getting open file descriptors:', error.message);
+        return null;
+    }
+}
+
+
+// Get network bandwidth usage (bytes/sec)
+function getNetworkBandwidth() {
+    try {
+        if (!fs.existsSync('/proc/net/dev')) {
+            return null;
+        }
+        const devContent = fs.readFileSync('/proc/net/dev', 'utf8');
+        const lines = devContent.split('\n');
+        
+        let totalRx = 0;
+        let totalTx = 0;
+        
+        for (const line of lines) {
+            if (!line.includes(':')) continue;
+            const parts = line.split(':');
+            const interfaceName = parts[0].trim();
+            // Skip loopback interface
+            if (interfaceName === 'lo') continue;
+            
+            const metrics = parts[1].trim().split(/\s+/);
+            if (metrics.length >= 9) {
+                totalRx += parseInt(metrics[0], 10);
+                totalTx += parseInt(metrics[8], 10);
+            }
+        }
+        
+        const now = Date.now();
+        const activeSample = (typeof global !== 'undefined' && global.lastNetworkSample !== undefined)
+            ? global.lastNetworkSample
+            : lastNetworkSample;
+
+        if (!activeSample) {
+            const newSample = { timestamp: now, rxBytes: totalRx, txBytes: totalTx };
+            if (typeof global !== 'undefined' && global.lastNetworkSample !== undefined) {
+                global.lastNetworkSample = newSample;
+            } else {
+                lastNetworkSample = newSample;
+            }
+            return { rxBytesPerSec: 0, txBytesPerSec: 0 };
+        }
+        
+        const elapsedSec = (now - activeSample.timestamp) / 1000;
+        if (elapsedSec <= 0) {
+            return { rxBytesPerSec: 0, txBytesPerSec: 0 };
+        }
+        
+        const rxBytesPerSec = Math.max(0, (totalRx - activeSample.rxBytes) / elapsedSec);
+        const txBytesPerSec = Math.max(0, (totalTx - activeSample.txBytes) / elapsedSec);
+        
+        const newSample = { timestamp: now, rxBytes: totalRx, txBytes: totalTx };
+        if (typeof global !== 'undefined' && global.lastNetworkSample !== undefined) {
+            global.lastNetworkSample = newSample;
+        } else {
+            lastNetworkSample = newSample;
+        }
+        
+        return {
+            rxBytesPerSec: parseFloat(rxBytesPerSec.toFixed(2)),
+            txBytesPerSec: parseFloat(txBytesPerSec.toFixed(2))
+        };
+    } catch (error) {
+        console.error('Error getting network bandwidth:', error.message);
+        return null;
+    }
+}
+
+
+// Get disk I/O metrics (reads/writes per sec)
+function getDiskIO() {
+    try {
+        if (!fs.existsSync('/proc/diskstats')) {
+            return null;
+        }
+        const statsContent = fs.readFileSync('/proc/diskstats', 'utf8');
+        const lines = statsContent.split('\n');
+        
+        let totalReads = 0;
+        let totalWrites = 0;
+        
+        for (const line of lines) {
+            const parts = line.trim().split(/\s+/);
+            if (parts.length >= 14) {
+                const deviceName = parts[2];
+                // Only track actual block devices: sdX, nvmeXnX, vdX, hdX
+                if (/^(sd[a-z]|nvme\d+n\d+|vd[a-z]|hd[a-z])$/.test(deviceName)) {
+                    totalReads += parseInt(parts[3], 10);
+                    totalWrites += parseInt(parts[7], 10);
+                }
+            }
+        }
+        
+        const now = Date.now();
+        const activeSample = (typeof global !== 'undefined' && global.lastDiskIOSample !== undefined)
+            ? global.lastDiskIOSample
+            : lastDiskIOSample;
+
+        if (!activeSample) {
+            const newSample = { timestamp: now, reads: totalReads, writes: totalWrites };
+            if (typeof global !== 'undefined' && global.lastDiskIOSample !== undefined) {
+                global.lastDiskIOSample = newSample;
+            } else {
+                lastDiskIOSample = newSample;
+            }
+            return { readOpsPerSec: 0, writeOpsPerSec: 0 };
+        }
+        
+        const elapsedSec = (now - activeSample.timestamp) / 1000;
+        if (elapsedSec <= 0) {
+            return { readOpsPerSec: 0, writeOpsPerSec: 0 };
+        }
+        
+        const readOpsPerSec = Math.max(0, (totalReads - activeSample.reads) / elapsedSec);
+        const writeOpsPerSec = Math.max(0, (totalWrites - activeSample.writes) / elapsedSec);
+        
+        const newSample = { timestamp: now, reads: totalReads, writes: totalWrites };
+        if (typeof global !== 'undefined' && global.lastDiskIOSample !== undefined) {
+            global.lastDiskIOSample = newSample;
+        } else {
+            lastDiskIOSample = newSample;
+        }
+        
+        return {
+            readOpsPerSec: parseFloat(readOpsPerSec.toFixed(2)),
+            writeOpsPerSec: parseFloat(writeOpsPerSec.toFixed(2))
+        };
+    } catch (error) {
+        console.error('Error getting disk I/O:', error.message);
+        return null;
+    }
+}
+
+
 // Format process list for Slack message
 function formatProcessList(processes, type) {
     if (!processes || processes.length === 0) return 'No processes found';
@@ -262,12 +421,29 @@ async function sendSlackAlert(alerts) {
     const uptime = getUptime();
     const load = getSystemLoad();
     const disk = getDiskUsage();
+    const openFiles = getOpenFileDescriptors();
+    const netBandwidth = getNetworkBandwidth();
+    const diskIO = getDiskIO();
 
     // Compose main message text with system info
     let messageText = `🚨 *System Health Alert on ${hostname}*`;
     if (uptime) messageText += `\n⏰ Uptime: ${uptime}`;
     if (load) messageText += `\n📊 Load: ${load['1min']} (1m), ${load['5min']} (5m), ${load['15min']} (15m)`;
     if (disk) messageText += `\n💾 Root Disk: ${disk.used}/${disk.size} (${disk.usagePercent})`;
+    if (openFiles) {
+        messageText += `\n📂 Open Files: ${openFiles.allocated} / ${openFiles.maximum} (${openFiles.usagePercent}%)`;
+    }
+    if (netBandwidth) {
+        const formatSpeed = (bytes) => {
+            if (bytes > 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MB/s`;
+            if (bytes > 1024) return `${(bytes / 1024).toFixed(2)} KB/s`;
+            return `${bytes.toFixed(0)} B/s`;
+        };
+        messageText += `\n🌐 Net Bandwidth: RX: ${formatSpeed(netBandwidth.rxBytesPerSec)} | TX: ${formatSpeed(netBandwidth.txBytesPerSec)}`;
+    }
+    if (diskIO) {
+        messageText += `\n💽 Disk I/O: Read: ${diskIO.readOpsPerSec} ops/s | Write: ${diskIO.writeOpsPerSec} ops/s`;
+    }
 
     // Format each alert as a Slack attachment
     const attachments = alerts.map(alert => ({
@@ -295,6 +471,10 @@ async function sendSlackAlert(alerts) {
 
 // Track when CPU first exceeded threshold
 let cpuOverThresholdSince = null;
+
+// State variables for network and disk I/O tracking
+let lastNetworkSample = null;
+let lastDiskIOSample = null;
 
 
 /*
@@ -456,6 +636,9 @@ module.exports = {
     getSystemLoad,
     getUptime,
     getDiskUsage,
+    getOpenFileDescriptors,
+    getNetworkBandwidth,
+    getDiskIO,
     formatProcessList,
     checkSystemHealth,
     sendSlackAlert
