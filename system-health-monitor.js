@@ -26,6 +26,9 @@ const {
     validateWebhook,
     setupGracefulShutdown,
 } = require('./lib/common');
+const { getLogger } = require('./lib/logger');
+
+const logger = getLogger('system-health-monitor');
 
 // =====================
 // Configuration Section
@@ -41,7 +44,7 @@ const CHECK_INTERVAL             = config.CHECK_INTERVAL;
 const ALERT_COOLDOWN             = config.ALERT_COOLDOWN;
 
 // Alert cooldown tracking (persisted to file)
-const alertTracker = createAlertTracker('.last_health_alert');
+const alertTracker = createAlertTracker('.last_health_alert', logger);
 
 
 // Get current CPU usage as a percentage
@@ -51,7 +54,7 @@ function getCpuUsage() {
         const output = cp.execSync("top -bn1 | grep 'Cpu(s)' | awk '{print $2 + $4}'", { encoding: 'utf8' });
         return parseFloat(output.trim());
     } catch (error) {
-        console.error('Error getting CPU usage:', error.message);
+        logger.error({ err: error }, 'Error getting CPU usage');
         return null;
     }
 }
@@ -82,7 +85,7 @@ function getTopCpuProcesses(limit = 5) {
             return null;
         }).filter(Boolean);
     } catch (error) {
-        console.error('Error getting top CPU processes:', error.message);
+        logger.error({ err: error }, 'Error getting top CPU processes');
         return [];
     }
 }
@@ -95,7 +98,7 @@ function getMemUsage() {
         const output = cp.execSync("free | grep Mem | awk '{print $3/$2 * 100.0}'", { encoding: 'utf8' });
         return parseFloat(output.trim());
     } catch (error) {
-        console.error('Error getting memory usage:', error.message);
+        logger.error({ err: error }, 'Error getting memory usage');
         return null;
     }
 }
@@ -120,7 +123,7 @@ function getDetailedMemoryInfo() {
             available: parts[6]
         };
     } catch (error) {
-        console.error('Error getting detailed memory info:', error.message);
+        logger.error({ err: error }, 'Error getting detailed memory info');
         return null;
     }
 }
@@ -151,7 +154,7 @@ function getTopMemoryProcesses(limit = 5) {
             return null;
         }).filter(Boolean);
     } catch (error) {
-        console.error('Error getting top memory processes:', error.message);
+        logger.error({ err: error }, 'Error getting top memory processes');
         return [];
     }
 }
@@ -164,7 +167,7 @@ function getSwapUsage() {
         const output = cp.execSync("free | grep Swap | awk '{if ($2==0) print 0; else print $3/$2 * 100.0}'", { encoding: 'utf8' });
         return parseFloat(output.trim());
     } catch (error) {
-        console.error('Error getting swap usage:', error.message);
+        logger.error({ err: error }, 'Error getting swap usage');
         return null;
     }
 }
@@ -186,7 +189,7 @@ function getDetailedSwapInfo() {
             free: parts[3]
         };
     } catch (error) {
-        console.error('Error getting detailed swap info:', error.message);
+        logger.error({ err: error }, 'Error getting detailed swap info');
         return null;
     }
 }
@@ -207,7 +210,7 @@ function getSystemLoad() {
         }
         return null;
     } catch (error) {
-        console.error('Error getting system load:', error.message);
+        logger.error({ err: error }, 'Error getting system load');
         return null;
     }
 }
@@ -219,7 +222,7 @@ function getUptime() {
         const output = cp.execSync("uptime -p", { encoding: 'utf8' });
         return output.trim();
     } catch (error) {
-        console.error('Error getting uptime:', error.message);
+        logger.error({ err: error }, 'Error getting uptime');
         return null;
     }
 }
@@ -241,7 +244,7 @@ function getDiskUsage() {
             mountpoint: parts[5]
         };
     } catch (error) {
-        console.error('Error getting disk usage:', error.message);
+        logger.error({ err: error }, 'Error getting disk usage');
         return null;
     }
 }
@@ -267,7 +270,7 @@ function getOpenFileDescriptors() {
         }
         return null;
     } catch (error) {
-        console.error('Error getting open file descriptors:', error.message);
+        logger.error({ err: error }, 'Error getting open file descriptors');
         return null;
     }
 }
@@ -334,7 +337,7 @@ function getNetworkBandwidth() {
             txBytesPerSec: parseFloat(txBytesPerSec.toFixed(2))
         };
     } catch (error) {
-        console.error('Error getting network bandwidth:', error.message);
+        logger.error({ err: error }, 'Error getting network bandwidth');
         return null;
     }
 }
@@ -399,7 +402,7 @@ function getDiskIO() {
             writeOpsPerSec: parseFloat(writeOpsPerSec.toFixed(2))
         };
     } catch (error) {
-        console.error('Error getting disk I/O:', error.message);
+        logger.error({ err: error }, 'Error getting disk I/O');
         return null;
     }
 }
@@ -461,10 +464,10 @@ async function sendSlackAlert(alerts) {
 
     try {
         await axios.post(SLACK_WEBHOOK_URL, message);
-        console.log('Slack alert sent:', alerts.map(a => a.title).join(', '));
+        logger.info({ alertCount: alerts.length, alertTitles: alerts.map(a => a.title) }, 'Slack health alert sent');
         alertTracker.setLastAlertTime();
     } catch (error) {
-        console.error('Error sending Slack message:', error.message);
+        logger.error({ err: error, alertCount: alerts.length }, 'Error sending Slack message');
     }
 }
 
@@ -525,7 +528,11 @@ function checkSystemHealth() {
                 ]
             });
         } else {
-            console.log(`CPU over threshold, but not for 5 minutes yet (${((now-activeSince)/60000).toFixed(1)} min)`);
+            logger.info({
+                cpu,
+                cpuThreshold: CPU_THRESHOLD,
+                activeMinutes: ((now - activeSince) / 60000).toFixed(1),
+            }, 'CPU over threshold, but duration not met yet');
         }
     } else {
         if (typeof global !== 'undefined' && global.cpuOverThresholdSince !== undefined) {
@@ -595,10 +602,10 @@ function checkSystemHealth() {
         if (now - lastAlertTime >= ALERT_COOLDOWN) {
             sendSlackAlert(alerts);
         } else {
-            console.log('Alert(s) detected, but cooldown still active.');
+            logger.info({ alertCount: alerts.length }, 'Alert(s) detected, but cooldown still active');
         }
     } else {
-        console.log('System health OK.');
+        logger.info({ cpu, mem, swap }, 'System health OK');
     }
 }
 
@@ -609,18 +616,19 @@ function checkSystemHealth() {
 if (require.main === module) {
     validateWebhook(SLACK_WEBHOOK_URL);
 
-    console.log('☀️☀️☀️ System health monitor started');
-    console.log(`Checking every ${CHECK_INTERVAL / 1000 / 60} minutes`);
-    console.log(`CPU threshold: ${CPU_THRESHOLD}%`);
-    console.log(`Memory threshold: ${MEM_THRESHOLD}%`);
-    console.log(`Swap threshold: ${SWAP_THRESHOLD}%`);
-    console.log(`Alert cooldown: ${ALERT_COOLDOWN / 1000 / 60} minutes`);
+    logger.info({
+        checkIntervalMinutes: CHECK_INTERVAL / 1000 / 60,
+        cpuThresholdPercent: CPU_THRESHOLD,
+        memoryThresholdPercent: MEM_THRESHOLD,
+        swapThresholdPercent: SWAP_THRESHOLD,
+        alertCooldownMinutes: ALERT_COOLDOWN / 1000 / 60,
+    }, 'System health monitor started');
 
     // Initial health check and schedule periodic checks
     checkSystemHealth();
     setInterval(checkSystemHealth, CHECK_INTERVAL);
 
-    setupGracefulShutdown('System health monitor');
+    setupGracefulShutdown('System health monitor', logger);
 }
 
 

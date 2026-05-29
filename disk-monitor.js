@@ -24,6 +24,9 @@ const {
     validateWebhook,
     setupGracefulShutdown,
 } = require('./lib/common');
+const { getLogger } = require('./lib/logger');
+
+const logger = getLogger('disk-monitor');
 
 // =====================
 // Configuration Section
@@ -36,7 +39,7 @@ const CHECK_INTERVAL    = config.CHECK_INTERVAL;
 const ALERT_COOLDOWN    = config.ALERT_COOLDOWN;
 
 // Alert cooldown tracking (persisted to file)
-const alertTracker = createAlertTracker('.last_disk_alert');
+const alertTracker = createAlertTracker('.last_disk_alert', logger);
 
 
 // Get disk usage percentage for root filesystem
@@ -46,7 +49,7 @@ function getDiskUsage() {
         const output = cp.execSync("df -h / | awk 'NR==2 {print $5}' | sed 's/%//'", { encoding: 'utf8' });
         return parseInt(output.trim());
     } catch (error) {
-        console.error('Error getting disk usage:', error.message);
+        logger.error({ err: error }, 'Error getting disk usage');
         return null;
     }
 }
@@ -88,10 +91,10 @@ async function sendSlackAlert(diskUsage) {
 
     try {
         await axios.post(SLACK_WEBHOOK_URL, message);
-        console.log(`Slack alert sent: Disk usage at ${diskUsage}%`);
+        logger.info({ diskUsage, threshold: DISK_THRESHOLD }, 'Slack disk alert sent');
         alertTracker.setLastAlertTime();
     } catch (error) {
-        console.error('Error sending Slack message:', error.message);
+        logger.error({ err: error, diskUsage }, 'Error sending Slack message');
     }
 }
 
@@ -105,10 +108,10 @@ async function sendSlackAlert(diskUsage) {
 function checkDiskUsage() {
     const diskUsage = getDiskUsage();
     if (diskUsage === null) {
-        console.log('Could not retrieve disk usage');
+        logger.warn('Could not retrieve disk usage');
         return;
     }
-    console.log(`Current disk usage: ${diskUsage}%`);
+    logger.info({ diskUsage }, 'Disk usage sampled');
     if (diskUsage >= DISK_THRESHOLD) {
         const lastAlertTime = alertTracker.getLastAlertTime();
         const now = Date.now();
@@ -116,7 +119,7 @@ function checkDiskUsage() {
         if (now - lastAlertTime >= ALERT_COOLDOWN) {
             sendSlackAlert(diskUsage);
         } else {
-            console.log('Disk usage over threshold, but alert cooldown still active');
+            logger.info({ diskUsage, threshold: DISK_THRESHOLD }, 'Disk usage over threshold, but alert cooldown still active');
         }
     }
 }
@@ -128,16 +131,17 @@ function checkDiskUsage() {
 if (require.main === module) {
     validateWebhook(SLACK_WEBHOOK_URL);
 
-    console.log('Disk usage monitor started');
-    console.log(`Checking every ${CHECK_INTERVAL / 1000 / 60} minutes`);
-    console.log(`Alert threshold: ${DISK_THRESHOLD}%`);
-    console.log(`Alert cooldown: ${ALERT_COOLDOWN / 1000 / 60} minutes`);
+    logger.info({
+        checkIntervalMinutes: CHECK_INTERVAL / 1000 / 60,
+        alertThresholdPercent: DISK_THRESHOLD,
+        alertCooldownMinutes: ALERT_COOLDOWN / 1000 / 60,
+    }, 'Disk usage monitor started');
 
     // Initial disk check and schedule periodic checks
     checkDiskUsage();
     setInterval(checkDiskUsage, CHECK_INTERVAL);
 
-    setupGracefulShutdown('Disk monitor');
+    setupGracefulShutdown('Disk monitor', logger);
 }
 
 

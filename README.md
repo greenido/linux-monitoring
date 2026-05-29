@@ -5,7 +5,7 @@ Well... I built it as we needed a simple/quick solution to monitor our servers.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D14.0.0-brightgreen)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](./TEST_README.md)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](./docs/TEST_README.md)
 
 What?
 This is NodeJS monitoring suite for Linux servers that provides real-time system health monitoring with intelligent alerts. 
@@ -13,6 +13,7 @@ The suite includes two main monitoring services:
 
 - **🖥️ System Health Monitor**: Monitors CPU, memory, and swap usage with detailed process information
 - **💾 Disk Monitor**: Tracks disk usage across filesystems with threshold-based alerts
+- **🌐 Extended Host Metrics**: Adds open file descriptor usage, network bandwidth, and disk I/O telemetry
 - **📢 Smart Alerts**: Sends rich Slack notifications with system context and top processes
 - **🔧 Bulk Deployment**: Install across multiple servers simultaneously with robust SSH handling
 
@@ -20,6 +21,7 @@ The suite includes two main monitoring services:
 
 - [📁 Project Structure](#-project-structure)
 - [✨ Features](#-features)
+- [🆕 Today's Updates](#-todays-updates)
 - [⚡ Quick Start](#-quick-start)
 - [📋 Prerequisites](#prerequisites)
 - [🚀 Installation](#-installation)
@@ -56,7 +58,11 @@ public-linux-monitor/
 ├── 📊 Monitoring Scripts
 │   ├── system-health-monitor.js    # Main system health monitoring service
 │   ├── disk-monitor.js             # Disk usage monitoring service
-│   └── run-tests.js               # Standalone test runner
+│   └── run-tests.js                # Standalone test runner
+├── 🧩 Shared Utilities
+│   └── lib/
+│       ├── common.js               # Shared config, cooldown, webhook, and shutdown helpers
+│       └── logger.js               # Structured JSON/pretty logger (Pino)
 ├── 🔧 Installation & Deployment
 │   ├── bash-scripts/
 │   │   ├── install-disk-monitor.sh # Single server installation
@@ -66,9 +72,10 @@ public-linux-monitor/
 │   │   ├── ssh-diagnose.sh         # SSH troubleshooting
 │   │   └── fix-ssh-access.sh       # SSH key setup automation
 ├── 🧪 Testing & Documentation
-│   ├── test-system-health-monitor.js # Jest test suite
-│   ├── TEST_README.md             # Comprehensive testing guide
-│   ├── SSH_TROUBLESHOOTING.md     # SSH setup and debugging
+│   ├── test-system-health-monitor.js # Jest tests for system-health monitor
+│   ├── test-disk-monitor.js        # Jest tests for disk monitor
+│   ├── docs/TEST_README.md         # Comprehensive testing guide
+│   ├── docs/SSH_TROUBLESHOOTING.md # SSH setup and debugging
 │   └── README.md                  # This file
 └── ⚙️ Configuration
     ├── package.json               # Node.js dependencies and scripts
@@ -79,13 +86,48 @@ public-linux-monitor/
 ## ✨ Features
 
 - 🔍 **Multi-metric Monitoring**: CPU, memory, swap, and disk usage tracking
+- 🌐 **Host-Level Telemetry**: Open file descriptors (`/proc/sys/fs/file-nr`), network RX/TX bandwidth (`/proc/net/dev`), and disk I/O ops/sec (`/proc/diskstats`)
 - 📊 **Rich Context Alerts**: Slack notifications include top processes, system load, uptime, and resource breakdowns
 - ⚡ **Smart Thresholds**: Configurable alerting thresholds with cooldown periods
+- 🧩 **Shared Utility Layer**: Common configuration, webhook validation, cooldown tracking, and graceful shutdown logic in `lib/common.js`
+- 🪵 **Structured Logging**: Monitor logs now use Pino with machine-friendly JSON output and optional pretty mode
 - 🚀 **Systemd Integration**: Automatic startup and service management
 - 🔧 **Bulk Deployment**: Install across multiple servers with one command
 - 🛡️ **Robust SSH Handling**: Automated SSH troubleshooting and key management
 - 🧪 **Comprehensive Testing**: Full test suite with Jest and standalone runner
 - 📈 **Production Ready**: Designed for enterprise Linux environments
+
+## 🆕 Today's Updates
+
+### 1. New runtime metrics in system health alerts
+
+- Added **open file descriptors** usage and percentage reporting.
+- Added **network bandwidth** reporting (RX/TX bytes per second).
+- Added **disk I/O** reporting (read/write operations per second).
+- Included these metrics directly in Slack alert context to make triage faster.
+
+### 2. Monitor refactor with shared utilities
+
+- Extracted common monitor logic into `lib/common.js`.
+- Both monitors now share:
+   - Environment/config loading (`dotenv` + defaults)
+   - Alert cooldown file tracking
+   - Slack webhook validation
+   - Graceful shutdown handling
+
+### 3. Structured logging rollout
+
+- Added `lib/logger.js` with Pino-based logger creation.
+- Migrated monitor logs from `console.*` to structured logger calls.
+- Added support for:
+   - `LOG_LEVEL` (default: `info`)
+   - `LOG_FORMAT` (`json` default, `pretty` optional)
+
+### 4. Testing improvements
+
+- Added a dedicated Jest suite for disk monitor: `test-disk-monitor.js`.
+- Expanded system-health tests for the new telemetry functions.
+- Ensured monitor functions are exported for direct unit testing.
 
 ## Prerequisites
 
@@ -123,7 +165,7 @@ public-linux-monitor/
 **What the installer does:**
 - ✅ Installs Node.js and npm if missing
 - ✅ Sets up monitoring services in `/opt/disk-monitor`
-- ✅ Installs all dependencies (`axios`, `dotenv`)
+- ✅ Installs all dependencies (`axios`, `dotenv`, `pino`, `pino-pretty`)
 - ✅ Configures Slack webhook for both monitors
 - ✅ Creates and starts systemd services: `disk-monitor` and `system-health-monitor`
 - ✅ Enables services for automatic startup on boot
@@ -183,7 +225,7 @@ bash-scripts/bulk-install.sh -f custom-servers.txt -k ~/.ssh/key.pem -u root -s 
 
 ### SSH Troubleshooting
 
-- 🔧 **Issues?** See [`SSH_TROUBLESHOOTING.md`](./SSH_TROUBLESHOOTING.md) for comprehensive diagnostics
+- 🔧 **Issues?** See [`docs/SSH_TROUBLESHOOTING.md`](./docs/SSH_TROUBLESHOOTING.md) for comprehensive diagnostics
 - 🛠️ **Auto-fix:** Use `bash-scripts/ssh-diagnose.sh` and `bash-scripts/fix-ssh-access.sh`
 
 ## ⚙️ Configuration
@@ -209,6 +251,16 @@ cp .env.example .env
 | `CHECK_INTERVAL` | `300000` | Check interval in milliseconds (5 minutes) |
 | `ALERT_COOLDOWN` | `1800000` | Cooldown between alerts in milliseconds (30 minutes) |
 | `CPU_OVER_THRESHOLD_DURATION` | `300000` | CPU must be over threshold for this duration before alerting (5 minutes) |
+| `LOG_LEVEL` | `info` | Logging level for monitor output (e.g. `debug`, `info`, `warn`, `error`) |
+| `LOG_FORMAT` | `json` | Log format (`json` for machine parsing, `pretty` for human-readable development logs) |
+| `LOG_LEVEL` | `info` | Log level (`fatal`, `error`, `warn`, `info`, `debug`, `trace`) |
+| `LOG_FORMAT` | `json` | Output format: `json` for machine-readable logs, `pretty` for local readability |
+
+### Logging Output
+
+- Default output is newline-delimited JSON (NDJSON), which works well with CloudWatch, ELK/OpenSearch, Datadog, and other log ingestion pipelines.
+- Set `LOG_FORMAT=pretty` for local troubleshooting to get human-friendly logs.
+- Set `LOG_LEVEL` to control verbosity without code changes.
 
 ### Runtime Configuration
 
@@ -335,6 +387,7 @@ npm run test:watch
 
 # Run specific test file
 npm test test-system-health-monitor.js
+npm test test-disk-monitor.js
 
 # Run tests with verbose output
 npm test -- --verbose
@@ -357,12 +410,16 @@ node --inspect-brk run-tests.js
 - ✅ Swap usage monitoring and reporting
 - ✅ Disk usage monitoring across filesystems
 - ✅ System load and uptime reporting
+- ✅ Open file descriptor pressure monitoring
+- ✅ Network bandwidth sampling (RX/TX)
+- ✅ Disk I/O sampling (read/write ops/sec)
 
 **Alert System:**
 - ✅ Threshold-based alerting logic
 - ✅ Alert cooldown mechanisms
 - ✅ CPU duration-based alerting
 - ✅ Slack message formatting
+- ✅ Structured logging behavior
 - ✅ Error handling and recovery
 
 **Edge Cases:**
@@ -372,7 +429,7 @@ node --inspect-brk run-tests.js
 - ✅ Empty process lists
 - ✅ Boundary conditions
 
-📖 **Detailed Testing Guide**: See [`TEST_README.md`](./TEST_README.md) for comprehensive testing documentation.
+📖 **Detailed Testing Guide**: See [`docs/TEST_README.md`](./docs/TEST_README.md) for comprehensive testing documentation.
 
 ## 🔧 SSH Troubleshooting
 
@@ -399,7 +456,7 @@ bash-scripts/fix-ssh-access.sh
 | ⏰ **Connection timeout** | Verify network connectivity and firewall settings |
 | 👤 **Wrong username** | Use correct username for your Linux distribution (ubuntu, admin, root) |
 
-📖 **Comprehensive Guide**: See [`SSH_TROUBLESHOOTING.md`](./SSH_TROUBLESHOOTING.md) for detailed troubleshooting steps.
+📖 **Comprehensive Guide**: See [`docs/SSH_TROUBLESHOOTING.md`](./docs/SSH_TROUBLESHOOTING.md) for detailed troubleshooting steps.
 
 ## 🗑️ Uninstall
 
@@ -544,7 +601,7 @@ npm run test:watch
 node run-tests.js
 ```
 
-See [TEST_README.md](./TEST_README.md) for detailed testing documentation.
+See [docs/TEST_README.md](./docs/TEST_README.md) for detailed testing documentation.
 
 ### 📝 Code Standards
 
