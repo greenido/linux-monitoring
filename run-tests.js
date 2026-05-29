@@ -12,8 +12,108 @@
  *  - Output shows pass/fail and error details
  */
 
-const { execSync } = require('child_process');
+const cp = require('child_process');
 const fs = require('fs');
+
+// Set up mocks BEFORE importing system-health-monitor so that destructuring uses the mocked functions
+const originalExecSync = cp.execSync;
+const originalExistsSync = fs.existsSync;
+const originalReadFileSync = fs.readFileSync;
+const originalWriteFileSync = fs.writeFileSync;
+
+let mockExecSyncReturnValues = [];
+let mockExecSyncCallCount = 0;
+let mockFsExistsSync = false;
+let mockFsReadFileSync = '0';
+let mockFsWriteFileSyncCalled = false;
+
+function mockExecSyncFn(command, options) {
+    mockExecSyncCallCount++;
+    if (mockExecSyncReturnValues.length > 0) {
+        const val = mockExecSyncReturnValues.shift();
+        if (val instanceof Error) {
+            throw val;
+        }
+        return val;
+    }
+    
+    // Provide safe, realistic mocked system outputs as defaults
+    if (command.includes("top -bn1 | grep 'Cpu(s)'")) {
+        return '85.5';
+    } else if (command.includes("free | grep Mem")) {
+        return '75.3';
+    } else if (command.includes("free | grep Swap")) {
+        return '35.7';
+    } else if (command.includes("free -h")) {
+        return `              total        used        free      shared  buff/cache   available
+Mem:           15Gi       8.2Gi       2.1Gi       0.0Ki       4.7Gi       6.8Gi
+Swap:         8.0Gi       1.2Gi       6.8Gi`;
+    } else if (command.includes("ps aux --sort=-%cpu")) {
+        return `user1 1234 25.5 10.2 1234567 89012 pts/0 S+ 10:30 0:05 /usr/bin/node app.js
+user2 5678 15.2 5.1 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
+    } else if (command.includes("ps aux --sort=-%mem")) {
+        return `user1 1234 5.2 25.5 1234567 89012 pts/0 S+ 10:30 0:05 /usr/bin/node app.js
+user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
+    } else if (command.includes("uptime -p")) {
+        return 'up 2 days, 3 hours, 45 minutes';
+    } else if (command.includes("uptime")) {
+        return ' 10:45:30 up 2 days, 3:45, 2 users, load average: 1.25, 1.15, 0.95';
+    } else if (command.includes("df -h /")) {
+        return '/dev/sda1       100G   75G   20G  79% /';
+    }
+    return '';
+}
+
+function mockExistsSync(path) {
+    if (path.includes('.last_health_alert') || path.includes('.last_disk_alert') || path.includes('.env')) {
+        return mockFsExistsSync;
+    }
+    return originalExistsSync(path);
+}
+
+function mockReadFileSync(path, encoding) {
+    if (path.includes('.last_health_alert') || path.includes('.last_disk_alert') || path.includes('.env')) {
+        return mockFsReadFileSync;
+    }
+    return originalReadFileSync(path, encoding);
+}
+
+function mockWriteFileSync(path, data, options) {
+    if (path.includes('.last_health_alert') || path.includes('.last_disk_alert')) {
+        mockFsWriteFileSyncCalled = true;
+        return;
+    }
+    return originalWriteFileSync(path, data, options);
+}
+
+// Override module properties
+cp.execSync = mockExecSyncFn;
+fs.existsSync = mockExistsSync;
+fs.readFileSync = mockReadFileSync;
+fs.writeFileSync = mockWriteFileSync;
+
+function resetMocks() {
+    mockExecSyncReturnValues = [];
+    mockExecSyncCallCount = 0;
+    mockFsExistsSync = false;
+    mockFsReadFileSync = '0';
+    mockFsWriteFileSyncCalled = false;
+}
+
+// Now safely import the functions to test
+const {
+    getCpuUsage,
+    getTopCpuProcesses,
+    getMemUsage,
+    getDetailedMemoryInfo,
+    getTopMemoryProcesses,
+    getSwapUsage,
+    getDetailedSwapInfo,
+    getSystemLoad,
+    getUptime,
+    getDiskUsage,
+    formatProcessList
+} = require('./system-health-monitor');
 
 // Simple test runner for system health monitor
 console.log('🧪 Running System Health Monitor Tests...\n');
@@ -31,9 +131,11 @@ function test(name, testFunction) {
         console.log(`   Error: ${error.message}`);
         testsFailed++;
     }
+}
 
 function expect(value) {
     return {
+        toBe: (expected) => {
             if (value !== expected) {
                 throw new Error(`Expected ${value} to be ${expected}`);
             }
@@ -43,7 +145,6 @@ function expect(value) {
                 throw new Error(`Expected ${value} to be null`);
             }
         },
-        function test(name, testFunction) {
         toEqual: (expected) => {
             if (JSON.stringify(value) !== JSON.stringify(expected)) {
                 throw new Error(`Expected ${JSON.stringify(value)} to equal ${JSON.stringify(expected)}`);
@@ -55,116 +156,41 @@ function expect(value) {
             }
         },
         toContain: (expected) => {
-                throw new Error(`Expected ${value} to contain ${expected}`);
+            if (!value.includes(expected)) {
+                throw new Error(`Expected "${value}" to contain "${expected}"`);
             }
         }
     };
-
-// Mock execSync for testing
-const originalExecSync = require('child_process').execSync;
-let mockExecSyncReturnValues = [];
-let mockExecSyncCallCount = 0;
-
-function mockExecSync(command, options) {
-    mockExecSyncCallCount++;
-    if (mockExecSyncReturnValues.length > 0) {
-        return mockExecSyncReturnValues.shift();
-    }
-    return originalExecSync(command, options);
 }
-
-// Mock fs for testing
-const originalExistsSync = fs.existsSync;
-const originalReadFileSync = fs.readFileSync;
-const originalWriteFileSync = fs.writeFileSync;
-
-let mockFsExistsSync = false;
-let mockFsReadFileSync = '0';
-let mockFsWriteFileSyncCalled = false;
-
-        function expect(value) {
-function mockExistsSync(path) {
-    return mockFsExistsSync;
-}
-
-function mockReadFileSync(path, encoding) {
-    return mockFsReadFileSync;
-}
-
-function mockWriteFileSync(path, data) {
-    mockFsWriteFileSyncCalled = true;
-}
-
-// Test helper functions
-function setupMocks() {
-    require('child_process').execSync = mockExecSync;
-    fs.existsSync = mockExistsSync;
-    fs.readFileSync = mockReadFileSync;
-    fs.writeFileSync = mockWriteFileSync;
-    mockExecSyncCallCount = 0;
-    mockExecSyncReturnValues = [];
-    mockFsExistsSync = false;
-    mockFsReadFileSync = '0';
-    mockFsWriteFileSyncCalled = false;
-}
-
-function restoreMocks() {
-    require('child_process').execSync = originalExecSync;
-    fs.existsSync = originalExistsSync;
-    fs.readFileSync = originalReadFileSync;
-    fs.writeFileSync = originalWriteFileSync;
-}
-
-// Import the functions to test
-const {
-    getCpuUsage,
-    getTopCpuProcesses,
-    getMemUsage,
-    getDetailedMemoryInfo,
-    getTopMemoryProcesses,
-    getSwapUsage,
-    getDetailedSwapInfo,
-    getSystemLoad,
-    getUptime,
-    getDiskUsage,
-    formatProcessList
-} = require('./system-health-monitor');
 
 // Test CPU Usage
 test('getCpuUsage should return correct CPU percentage', () => {
-    setupMocks();
+    resetMocks();
     mockExecSyncReturnValues = ['85.5'];
     
     const result = getCpuUsage();
     expect(result).toBe(85.5);
-    
-    restoreMocks();
 });
 
 test('getCpuUsage should handle errors gracefully', () => {
-    setupMocks();
+    resetMocks();
     mockExecSyncReturnValues = [new Error('Command failed')];
     
     const result = getCpuUsage();
     expect(result).toBeNull();
-    
-    restoreMocks();
 });
 
 // Test Memory Usage
-
 test('getMemUsage should return correct memory percentage', () => {
-    setupMocks();
+    resetMocks();
     mockExecSyncReturnValues = ['75.3'];
     
     const result = getMemUsage();
     expect(result).toBe(75.3);
-    
-    restoreMocks();
 });
 
 test('getDetailedMemoryInfo should parse memory info correctly', () => {
-    setupMocks();
+    resetMocks();
     const mockFreeOutput = `              total        used        free      shared  buff/cache   available
 Mem:           15Gi       8.2Gi       2.1Gi       0.0Ki       4.7Gi       6.8Gi
 Swap:         8.0Gi       1.2Gi       6.8Gi`;
@@ -179,13 +205,11 @@ Swap:         8.0Gi       1.2Gi       6.8Gi`;
         cache: '4.7Gi',
         available: '6.8Gi'
     });
-    
-    restoreMocks();
 });
 
 // Test Process Lists
 test('getTopCpuProcesses should parse process list correctly', () => {
-    setupMocks();
+    resetMocks();
     const mockPsOutput = `user1 1234 25.5 10.2 1234567 89012 pts/0 S+ 10:30 0:05 /usr/bin/node app.js
 user2 5678 15.2 5.1 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
     mockExecSyncReturnValues = [mockPsOutput];
@@ -194,12 +218,10 @@ user2 5678 15.2 5.1 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
     expect(result).toHaveLength(2);
     expect(result[0].cpu).toBe(25.5);
     expect(result[0].command).toBe('/usr/bin/node app.js');
-    
-    restoreMocks();
 });
 
 test('getTopMemoryProcesses should parse memory processes correctly', () => {
-    setupMocks();
+    resetMocks();
     const mockPsOutput = `user1 1234 5.2 25.5 1234567 89012 pts/0 S+ 10:30 0:05 /usr/bin/node app.js
 user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
     mockExecSyncReturnValues = [mockPsOutput];
@@ -208,23 +230,19 @@ user2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
     expect(result).toHaveLength(2);
     expect(result[0].mem).toBe(25.5);
     expect(result[1].mem).toBe(15.2);
-    
-    restoreMocks();
 });
 
 // Test Swap Usage
 test('getSwapUsage should return correct swap percentage', () => {
-    setupMocks();
+    resetMocks();
     mockExecSyncReturnValues = ['35.7'];
     
     const result = getSwapUsage();
     expect(result).toBe(35.7);
-    
-    restoreMocks();
 });
 
 test('getDetailedSwapInfo should parse swap info correctly', () => {
-    setupMocks();
+    resetMocks();
     const mockFreeOutput = `              total        used        free      shared  buff/cache   available
 Mem:           15Gi       8.2Gi       2.1Gi       0.0Ki       4.7Gi       6.8Gi
 Swap:         8.0Gi       1.2Gi       6.8Gi`;
@@ -236,13 +254,11 @@ Swap:         8.0Gi       1.2Gi       6.8Gi`;
         used: '1.2Gi',
         free: '6.8Gi'
     });
-    
-    restoreMocks();
 });
 
 // Test System Information
 test('getSystemLoad should parse load averages correctly', () => {
-    setupMocks();
+    resetMocks();
     const mockUptimeOutput = ' 10:45:30 up 2 days, 3:45, 2 users, load average: 1.25, 1.15, 0.95';
     mockExecSyncReturnValues = [mockUptimeOutput];
     
@@ -252,23 +268,19 @@ test('getSystemLoad should parse load averages correctly', () => {
         '5min': 1.15,
         '15min': 0.95
     });
-    
-    restoreMocks();
 });
 
 test('getUptime should return uptime string', () => {
-    setupMocks();
+    resetMocks();
     const mockUptimeOutput = 'up 2 days, 3 hours, 45 minutes';
     mockExecSyncReturnValues = [mockUptimeOutput];
     
     const result = getUptime();
     expect(result).toBe('up 2 days, 3 hours, 45 minutes');
-    
-    restoreMocks();
 });
 
 test('getDiskUsage should parse disk usage correctly', () => {
-    setupMocks();
+    resetMocks();
     const mockDfOutput = '/dev/sda1       100G   75G   20G  79% /';
     mockExecSyncReturnValues = [mockDfOutput];
     
@@ -281,8 +293,6 @@ test('getDiskUsage should parse disk usage correctly', () => {
         usagePercent: '79%',
         mountpoint: '/'
     });
-    
-    restoreMocks();
 });
 
 // Test Process List Formatting
@@ -331,13 +341,24 @@ test('formatProcessList should truncate long command names', () => {
     ];
     
     const result = formatProcessList(processes, 'cpu');
-    expect(result).toContain('1. */usr/bin/very/long/path/to/a/very/long/command/name/that/exceeds/fifty/characters...*');
+    expect(result).toContain('1. */usr/bin/very/long/path/to/a/very/long/command/...*');
 });
 
 // Test Error Handling
 test('should handle command failures gracefully', () => {
-    setupMocks();
-    mockExecSyncReturnValues = [new Error('Command failed')];
+    resetMocks();
+    mockExecSyncReturnValues = [
+        new Error('Command failed'), // getCpuUsage
+        new Error('Command failed'), // getTopCpuProcesses
+        new Error('Command failed'), // getMemUsage
+        new Error('Command failed'), // getDetailedMemoryInfo
+        new Error('Command failed'), // getTopMemoryProcesses
+        new Error('Command failed'), // getSwapUsage
+        new Error('Command failed'), // getDetailedSwapInfo
+        new Error('Command failed'), // getSystemLoad
+        new Error('Command failed'), // getUptime
+        new Error('Command failed')  // getDiskUsage
+    ];
     
     expect(getCpuUsage()).toBeNull();
     expect(getTopCpuProcesses()).toEqual([]);
@@ -349,8 +370,6 @@ test('should handle command failures gracefully', () => {
     expect(getSystemLoad()).toBeNull();
     expect(getUptime()).toBeNull();
     expect(getDiskUsage()).toBeNull();
-    
-    restoreMocks();
 });
 
 // Print test results
@@ -359,10 +378,16 @@ console.log(`✅ Tests Passed: ${testsPassed}`);
 console.log(`❌ Tests Failed: ${testsFailed}`);
 console.log(`📈 Total Tests: ${testsPassed + testsFailed}`);
 
+// Restore original modules
+cp.execSync = originalExecSync;
+fs.existsSync = originalExistsSync;
+fs.readFileSync = originalReadFileSync;
+fs.writeFileSync = originalWriteFileSync;
+
 if (testsFailed === 0) {
     console.log('\n🎉 All tests passed!');
     process.exit(0);
 } else {
     console.log('\n💥 Some tests failed!');
     process.exit(1);
-} 
+}

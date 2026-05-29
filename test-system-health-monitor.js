@@ -69,10 +69,10 @@ describe('System Health Monitor Tests', () => {
                 return `user1 1234 25.5 10.2 1234567 89012 pts/0 S+ 10:30 0:05 /usr/bin/node app.js\nuser2 5678 15.2 5.1 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py\nuser3 9012 8.7 3.2 456789 12345 pts/2 S+ 10:32 0:01 /usr/bin/bash`;
             } else if (command.includes("ps aux --sort=-%mem")) {
                 return `user1 1234 5.2 25.5 1234567 89012 pts/0 S+ 10:30 0:05 /usr/bin/node app.js\nuser2 5678 3.1 15.2 987654 32109 pts/1 R+ 10:31 0:02 /usr/bin/python script.py`;
-            } else if (command.includes("uptime")) {
-                return ' 10:45:30 up 2 days, 3:45, 2 users, load average: 1.25, 1.15, 0.95';
             } else if (command.includes("uptime -p")) {
                 return 'up 2 days, 3 hours, 45 minutes';
+            } else if (command.includes("uptime")) {
+                return ' 10:45:30 up 2 days, 3:45, 2 users, load average: 1.25, 1.15, 0.95';
             } else if (command.includes("df -h /")) {
                 return '/dev/sda1       100G   75G   20G  79% /';
             }
@@ -332,7 +332,18 @@ describe('System Health Monitor Tests', () => {
     // =====================
     describe('CPU Threshold Duration Tests', () => {
         test('should not alert immediately when CPU goes over threshold', () => {
-            mockExecSync.mockReturnValue('95.0');
+            mockExecSync.mockImplementation((command) => {
+                if (command.includes("top -bn1 | grep 'Cpu(s)'")) {
+                    return '95.0';
+                }
+                if (command.includes("free | grep Mem")) {
+                    return '75.0';
+                }
+                if (command.includes("free | grep Swap")) {
+                    return '25.0';
+                }
+                return '';
+            });
             const result = checkSystemHealth();
             expect(axios.post).not.toHaveBeenCalled();
         });
