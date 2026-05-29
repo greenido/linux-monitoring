@@ -139,3 +139,11 @@ if (require.main === module) {
 
     setupGracefulShutdown('Disk monitor');
 }
+
+
+// Export functions for testing and extension
+module.exports = {
+    getDiskUsage,
+    sendSlackAlert,
+    checkDiskUsage
+};
